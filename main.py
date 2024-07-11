@@ -4,16 +4,18 @@ import os
 import re
 import shutil
 from pathlib import Path
-import time
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
+# 切换到脚本所在目录
 os.chdir(Path(__file__).resolve().parent)
-logging.basicConfig(level=logging.DEBUG,
-                    filename='bangumi.log',  # 日志文件名
-                    filemode='a',  # 'w' 为覆盖写入，'a' 为追加
-                    encoding='utf8',
-                    format='%(asctime)s - %(levelname)s - %(message)s')  # 日志格式
+
+# 配置logger
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# 创建文件handler以写入日志文件
+file_handler = logging.FileHandler('bangumi.log', mode='a', encoding='utf-8')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
 
 global BANGUMI_LIST, TRADITION_KEYS
 
@@ -23,7 +25,7 @@ def read_config():
         raise Exception('番剧配置不存在')
     with open('bangumi.conf', 'r', encoding='utf-8') as file:
         config = json.load(file)
-        logging.info("config loaded: " + str(config))
+        logger.info("config loaded: " + str(config))
         global BANGUMI_LIST, TRADITION_KEYS
         BANGUMI_LIST = config['bangumi_list']
         TRADITION_KEYS = config['tradition_keys']
@@ -40,11 +42,9 @@ def rename_and_move():
             if os.path.isdir(file):
                 continue
             if key in file:
-                # 更新集数匹配正则表达式，适配更多文件名格式
                 if any(tradition_key in file for tradition_key in TRADITION_KEYS) and "Baha" not in file:
                     os.remove(file)
-                    logging.info(f"删除繁体番剧 {file}")
-                    print(f"删除繁体番剧 {file}")
+                    logger.info(f"删除繁体番剧 {file}")
                     continue
                 episode_match = re.search(r'\[?(\d{2})\]?|[-\s]*(\d{2})[-\s]*', file)
                 if episode_match:
@@ -54,40 +54,13 @@ def rename_and_move():
                         os.makedirs(target_dir)
                     old_path = os.path.join(os.getcwd(), file)
                     new_path = os.path.join(target_dir, new_filename)
-                    
+
                     shutil.move(old_path, new_path)
-                    logging.info(f"Moved {old_path} to {new_path}")
-                    print(f"Moved {old_path} to {new_path}")
+                    logger.info(f"Moved {old_path} to {new_path}")
                 else:
-                    logging.error(f"无法匹配文件名集数 {file}")
-                    print(f"无法匹配文件名集数 {file}")
-
-
-class MyHandler(FileSystemEventHandler):
-    def on_created(self, event):
-        # 此方法在检测到文件被创建时调用
-        if not event.is_directory:
-            print(f'新文件 {event.src_path} 已创建！')
-            # 这里可以添加你希望在文件创建时执行的代码
-            read_config()
-            rename_and_move()
-
-
-def main():
-    path = '.'  # 设置监控的目录为当前目录
-    event_handler = MyHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path, recursive=False)
-    observer.start()
-    try:
-        while True:
-            time.sleep(5)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+                    logger.error(f"无法匹配文件名集数 {file}")
 
 
 if __name__ == '__main__':
     read_config()
     rename_and_move()
-    main()
